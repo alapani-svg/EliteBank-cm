@@ -1,0 +1,42 @@
+# Environment & secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+.pytest_cache/
+htmlcov/
+.coverage
+.tox/
+
+# Django
+backend/db.sqlite3
+backend/staticfiles/
+backend/media/
+backend/venv/
+backend/.venv/
+
+# Node / Angular
+node_modules/
+frontend/dist/
+frontend/.angular/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
