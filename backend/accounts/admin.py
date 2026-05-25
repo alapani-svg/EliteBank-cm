@@ -297,7 +297,6 @@ class OTPChallengeAdmin(admin.ModelAdmin):
                        'consumed_at', 'attempts', 'created_at')
     list_per_page   = 50
     ordering        = ('-created_at',)
-    date_hierarchy  = 'created_at'
     actions         = ['action_invalidate']
 
     def state_badge(self, obj):
