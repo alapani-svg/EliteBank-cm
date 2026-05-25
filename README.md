@@ -1,14 +1,14 @@
 # Elite Bank — Backend (Django REST API)
 
-Institut Universitaire Saint Jean — Saint Jean Ingénieur
+Institut Universitaire Saint Jean Saint Jean Ingénieur
 End-of-Semester Project · Fullstack Web Development (Django REST + Angular)
 Student: AGOUFACK ALAPANI CORANTIN JUNIOR · Year 2 · 2025–2026
 Supervisor: Mr. KINKEU FRANCK DANIEL
 
-The Django REST API powering Elite Bank — a digital-banking platform for Cameroon
+The Django REST API powering Elite Bank  a digital-banking platform for Cameroon
 featuring peer-to-peer transfers, mobile-money deposit/withdrawal (Orange · MTN),
 utility-bill payments, airtime purchases, beneficiaries, notifications, and PDF/CSV
-statements — all behind JWT authentication.
+statements  all behind JWT authentication.
 
 > **Frontend (Angular 21 SPA) lives in a separate repo:**
 > https://github.com/alapani-svg/elitebank-frontend
