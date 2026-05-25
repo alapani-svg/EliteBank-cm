@@ -104,9 +104,11 @@ class TransactionAdmin(admin.ModelAdmin):
 
     def type_badge(self, obj):
         palette = {
-            'TRANSFER':   ('#0d6efd', '#e7f1ff'),
-            'DEPOSIT':    ('#198754', '#d1e7dd'),
-            'WITHDRAWAL': ('#fd7e14', '#fff3cd'),
+            'TRANSFER':     ('#0d6efd', '#e7f1ff'),
+            'DEPOSIT':      ('#198754', '#d1e7dd'),
+            'WITHDRAWAL':   ('#fd7e14', '#fff3cd'),
+            'BILL_PAYMENT': ('#6f42c1', '#ede4fb'),
+            'AIRTIME':      ('#d63384', '#fde6f1'),
         }
         color, bg = palette.get(obj.transaction_type, ('#6c757d', '#f8f9fa'))
         return format_html(

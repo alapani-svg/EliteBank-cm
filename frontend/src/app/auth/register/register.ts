@@ -24,11 +24,26 @@ function passwordMatch(group: AbstractControl): ValidationErrors | null {
 })
 export class Register implements OnInit {
 
+  // ── Step 1: signup form ───────────────────────────────────────────────────
   registerForm!: FormGroup;
   isLoading    = false;
   serverError  = '';
   showPw       = false;
   showPwC      = false;
+
+  // ── Step 2: OTP verification panel ────────────────────────────────────────
+  /** When non-empty, the OTP panel is shown instead of the signup form. */
+  challengeId    = '';
+  maskedEmail    = '';
+  registeredEmail = '';
+  otpForm!: FormGroup;
+  otpLoading = false;
+  otpError   = '';
+  resendCooldown = 0;
+  private resendTimer?: ReturnType<typeof setInterval>;
+
+  // ── Step 3: done ──────────────────────────────────────────────────────────
+  verified = false;
 
   constructor(
     private fb: FormBuilder,
@@ -48,9 +63,14 @@ export class Register implements OnInit {
       },
       { validators: passwordMatch }
     );
+
+    this.otpForm = this.fb.group({
+      code: ['', [Validators.required, Validators.pattern(/^\d{6}$/)]],
+    });
   }
 
-  get f() { return this.registerForm.controls; }
+  get f()  { return this.registerForm.controls; }
+  get of() { return this.otpForm.controls; }
   get mismatch(): boolean {
     return this.registerForm.hasError('passwordMismatch') &&
            (this.f['password_confirm'].dirty || this.f['password_confirm'].touched);
@@ -59,21 +79,84 @@ export class Register implements OnInit {
   togglePw():  void { this.showPw  = !this.showPw;  }
   togglePwC(): void { this.showPwC = !this.showPwC; }
 
+  // ── Step 1: submit signup ─────────────────────────────────────────────────
   onSubmit(): void {
     if (this.registerForm.invalid || this.isLoading) return;
     this.isLoading   = true;
     this.serverError = '';
 
     this.auth.register(this.registerForm.value).subscribe({
-      next: () => {
-        this.isLoading = false;
-        this.router.navigate(['/dashboard']);
+      next: (res) => {
+        this.isLoading       = false;
+        this.challengeId     = res.challenge_id;
+        this.maskedEmail     = res.masked_email;
+        this.registeredEmail = res.email;
+        this.startResendCooldown(30);
       },
       error: (err: HttpErrorResponse) => {
         this.isLoading   = false;
         this.serverError = this.parseError(err);
       }
     });
+  }
+
+  // ── Step 2: verify OTP ────────────────────────────────────────────────────
+  verifyOtp(): void {
+    if (this.otpForm.invalid || this.otpLoading) return;
+    this.otpLoading = true;
+    this.otpError   = '';
+
+    this.auth.verifyRegistration(this.challengeId, this.otpForm.value.code).subscribe({
+      next: () => {
+        this.otpLoading = false;
+        this.stopResendCooldown();
+        this.verified = true;
+        // Auto-redirect to /login after 2.5 s
+        setTimeout(() => this.router.navigate(['/login']), 2500);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.otpLoading = false;
+        this.otpError   = this.parseError(err);
+        this.otpForm.patchValue({ code: '' });
+      },
+    });
+  }
+
+  resendOtp(): void {
+    if (this.resendCooldown > 0 || this.otpLoading) return;
+    this.otpError = '';
+    this.auth.resendRegistrationOtp(this.registeredEmail).subscribe({
+      next: (res) => {
+        if (res.challenge_id) this.challengeId = res.challenge_id;
+        if (res.masked_email) this.maskedEmail = res.masked_email;
+        this.startResendCooldown(30);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.otpError = this.parseError(err);
+      },
+    });
+  }
+
+  cancelOtp(): void {
+    this.challengeId      = '';
+    this.maskedEmail      = '';
+    this.registeredEmail  = '';
+    this.otpForm.reset();
+    this.stopResendCooldown();
+  }
+
+  private startResendCooldown(seconds: number): void {
+    this.stopResendCooldown();
+    this.resendCooldown = seconds;
+    this.resendTimer = setInterval(() => {
+      this.resendCooldown--;
+      if (this.resendCooldown <= 0) this.stopResendCooldown();
+    }, 1000);
+  }
+
+  private stopResendCooldown(): void {
+    if (this.resendTimer) { clearInterval(this.resendTimer); this.resendTimer = undefined; }
+    this.resendCooldown = 0;
   }
 
   private parseError(err: HttpErrorResponse): string {

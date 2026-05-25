@@ -58,6 +58,24 @@ export function isOtpChallenge(r: LoginResult): r is OtpChallengeResponse {
   return (r as OtpChallengeResponse).requires_otp === true;
 }
 
+/** Server response when a fresh account is registered. NO JWT is returned —
+ *  the frontend must call verifyRegistration() with the emailed OTP code
+ *  before the user can log in. */
+export interface RegisterResponse {
+  message:       string;
+  requires_otp:  true;
+  purpose:       'register';
+  challenge_id:  string;
+  masked_email:  string;
+  email:         string;
+}
+
+export interface RegisterVerifyResponse {
+  message:  string;
+  email:    string;
+  verified: boolean;
+}
+
 // ── Token Keys ────────────────────────────────────────────────────────────────
 
 const ACCESS_KEY  = 'elite_access';
@@ -77,9 +95,27 @@ export class AuthService {
   ) {}
 
   // Registration — POST /api/auth/register/
-  register(payload: RegisterPayload): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${this.api}/api/auth/register/`, payload)
-      .pipe(tap(res => this.storeTokens(res.tokens)));
+  // Returns NO JWT. Caller must follow with verifyRegistration() using the
+  // OTP code that was emailed to the user.
+  register(payload: RegisterPayload): Observable<RegisterResponse> {
+    return this.http.post<RegisterResponse>(`${this.api}/api/auth/register/`, payload);
+  }
+
+  // Step 2 of registration — POST /api/auth/register/verify/
+  // Confirms email ownership. After success, the user can log in normally.
+  verifyRegistration(challenge_id: string, code: string): Observable<RegisterVerifyResponse> {
+    return this.http.post<RegisterVerifyResponse>(
+      `${this.api}/api/auth/register/verify/`,
+      { challenge_id, code },
+    );
+  }
+
+  // Re-send a fresh registration OTP — POST /api/auth/register/resend/
+  resendRegistrationOtp(email: string): Observable<{ message: string; challenge_id: string; masked_email: string }> {
+    return this.http.post<{ message: string; challenge_id: string; masked_email: string }>(
+      `${this.api}/api/auth/register/resend/`,
+      { email },
+    );
   }
 
   // Login — POST /api/auth/login/

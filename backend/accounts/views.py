@@ -24,19 +24,38 @@ def get_tokens_for_user(user):
 
 
 class RegisterView(APIView):
+    """
+    POST /api/auth/register/  body: { email, full_name, phone_number, password, password_confirm }
+
+    Creates the user (is_verified=False) and emails a 6-digit OTP to confirm
+    ownership of the address. Returns NO JWT — the frontend must complete
+    verification via /api/auth/register/verify/ before the user can sign in.
+    """
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
-        if serializer.is_valid():
-            user   = serializer.save()
-            tokens = get_tokens_for_user(user)
-            return Response({
-                'message': 'Account created successfully. Welcome to Elite Bank!',
-                'user':    UserSerializer(user).data,
-                'tokens':  tokens,
-            }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        user = serializer.save()
+        # New accounts start unverified; the OTP step flips this to True.
+        user.is_verified = False
+        user.save(update_fields=['is_verified'])
+
+        # Issue an email-OTP challenge for verification.
+        from .services.otp import issue_challenge, send_otp, mask_email
+        challenge, code = issue_challenge(user)
+        send_otp(user, code)
+
+        return Response({
+            'message':      'Account created. Please enter the 6-digit code we just emailed you.',
+            'requires_otp': True,
+            'purpose':      'register',
+            'challenge_id': str(challenge.id),
+            'masked_email': mask_email(user.email),
+            'email':        user.email,
+        }, status=status.HTTP_201_CREATED)
 
 
 class LoginView(APIView):
@@ -122,6 +141,91 @@ class OTPVerifyView(APIView):
             'message': 'Login successful.',
             'user':    UserSerializer(user).data,
             'tokens':  tokens,
+        }, status=status.HTTP_200_OK)
+
+
+class RegisterVerifyView(APIView):
+    """
+    POST /api/auth/register/verify/  body: { challenge_id, code }
+
+    Confirms the OTP that was emailed during registration. On success the
+    user's `is_verified` flag is set to True and they can log in normally.
+    Returns NO JWT — the frontend should redirect to /login.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        challenge_id = (request.data.get('challenge_id') or '').strip()
+        code         = (request.data.get('code') or '').strip()
+
+        if not challenge_id or not code:
+            return Response(
+                {'detail': 'challenge_id and code are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from .services.otp import verify_challenge
+        challenge, error = verify_challenge(challenge_id, code)
+        if challenge is None:
+            return Response({'detail': error}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = challenge.user
+        user.is_verified = True
+        user.save(update_fields=['is_verified'])
+
+        try:
+            from .services.notifications import notify
+            notify(
+                user, 'ACCOUNT', 'SUCCESS',
+                title='Welcome to Elite Bank',
+                body='Your email address has been verified. You can now sign in.',
+            )
+        except Exception:
+            pass
+
+        return Response({
+            'message': 'Email verified successfully. You can now sign in.',
+            'email':   user.email,
+            'verified': True,
+        }, status=status.HTTP_200_OK)
+
+
+class RegisterResendView(APIView):
+    """
+    POST /api/auth/register/resend/  body: { email }
+
+    Re-issues a fresh registration OTP. The user is identified by email
+    (since they don't have a session yet). Always returns 200 to avoid
+    leaking which emails exist. Only fires when the user is not yet verified.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = (request.data.get('email') or '').strip().lower()
+        if not email:
+            return Response(
+                {'detail': 'email is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from accounts.models import User as UserModel
+        try:
+            user = UserModel.objects.get(email__iexact=email, is_active=True, is_verified=False)
+        except UserModel.DoesNotExist:
+            # Silent success — don't reveal whether the address exists.
+            return Response({
+                'message':      'If your account needs verification, a new code has been sent.',
+                'masked_email': '',
+            }, status=status.HTTP_200_OK)
+
+        from .services.otp import issue_challenge, send_otp, mask_email
+        challenge, code = issue_challenge(user)
+        send_otp(user, code)
+
+        return Response({
+            'message':      'A new verification code has been sent to your email.',
+            'challenge_id': str(challenge.id),
+            'masked_email': mask_email(user.email),
         }, status=status.HTTP_200_OK)
 
 

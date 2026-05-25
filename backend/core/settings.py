@@ -72,9 +72,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-#  CORS 
-# Always allow localhost for dev. In production add the deployed frontend URL
-# via FRONTEND_URL (e.g. https://elite-bank.vercel.app). Multiple URLs may be
+
+
+
 _frontend_urls = [u.strip() for u in _cfg(
     'FRONTEND_URL', default='http://localhost:4200'
 ).split(',') if u.strip()]
@@ -109,7 +109,7 @@ WSGI_APPLICATION = 'core.wsgi.application'
 #  Database 
 # Locally: SQLite. On Render: read DATABASE_URL (auto-injected for the linked
 # Postgres instance) via dj-database-url.
-_database_url = _cfg('DATABASE_URL', default='render psql dpg-d85uvtv7f7vs73csbvd0-a.render.com')
+_database_url = _cfg('DATABASE_URL', default='')
 if _database_url:
     try:
         import dj_database_url

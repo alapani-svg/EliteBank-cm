@@ -5,7 +5,7 @@ from django.contrib.auth.forms import ReadOnlyPasswordHashField
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from .models import User, Beneficiary, Notification
+from .models import User, Beneficiary, Notification, OTPChallenge
 
 # ── Admin site branding ───────────────────────────────────────────────────────
 admin.site.site_header = "Elite Bank Administration"
@@ -284,3 +284,39 @@ class NotificationAdmin(admin.ModelAdmin):
     def action_mark_unread(self, request, queryset):
         n = queryset.filter(read=True).update(read=False, read_at=None)
         self.message_user(request, f'{n} notification(s) marked as unread.', messages.WARNING)
+
+
+# ── OTP Challenge admin ───────────────────────────────────────────────────────
+
+@admin.register(OTPChallenge)
+class OTPChallengeAdmin(admin.ModelAdmin):
+    list_display    = ('user', 'state_badge', 'attempts', 'expires_at', 'created_at')
+    list_filter     = ('created_at', 'expires_at')
+    search_fields   = ('user__email', 'user__full_name', 'id')
+    readonly_fields = ('id', 'user', 'code_hash', 'expires_at',
+                       'consumed_at', 'attempts', 'created_at')
+    list_per_page   = 50
+    ordering        = ('-created_at',)
+    date_hierarchy  = 'created_at'
+    actions         = ['action_invalidate']
+
+    def state_badge(self, obj):
+        from django.utils import timezone
+        if obj.consumed_at:
+            bg, fg, txt = '#e2e3e5', '#495057', 'CONSUMED'
+        elif obj.expires_at < timezone.now():
+            bg, fg, txt = '#f8d7da', '#721c24', 'EXPIRED'
+        else:
+            bg, fg, txt = '#d4edda', '#155724', 'LIVE'
+        return format_html(
+            '<span style="background:{};color:{};padding:2px 9px;border-radius:10px;'
+            'font-size:11px;font-weight:700;">{}</span>',
+            bg, fg, txt,
+        )
+    state_badge.short_description = 'State'
+
+    @admin.action(description='Invalidate selected challenges (mark consumed)')
+    def action_invalidate(self, request, queryset):
+        from django.utils import timezone
+        n = queryset.filter(consumed_at__isnull=True).update(consumed_at=timezone.now())
+        self.message_user(request, f'{n} challenge(s) invalidated.', messages.WARNING)
